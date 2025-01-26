@@ -1,0 +1,10 @@
+services:
+  influxdb:
+    image: influxdb:2
+    ports:
+      - 8086:8086
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - 3001:3000

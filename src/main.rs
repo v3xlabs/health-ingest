@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
-use futures::stream;
-use influxdb::{Client, Timestamp, WriteQuery};
+use futures::prelude::*;
+use influxdb2::models::DataPoint;
+use influxdb2::Client;
 use poem::{
     handler,
     listener::TcpListener,
@@ -33,8 +34,9 @@ async fn main() {
 }
 
 #[derive(Debug, Deserialize, Serialize)]
-struct PushBody {
+struct IOSPushBody {
     samples: String,
+    name: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -62,7 +64,7 @@ impl From<IOSHeartrateSample> for HeartrateSample {
         Self {
             value: sample.value.parse::<i64>().unwrap(),
             start_date: parse_ios_date(&sample.start_date).to_rfc2822(),
-            end_date: parse_ios_date(&sample.end_date).timestamp(),
+            end_date: parse_ios_date(&sample.end_date).timestamp_nanos() as i64,
         }
     }
 }
@@ -75,12 +77,15 @@ fn parse_ios_date(date: &str) -> DateTime<Utc> {
 }
 
 #[handler]
-async fn push_ios(state: Data<&Arc<AppState>>, body: Json<PushBody>) -> impl IntoResponse {
-    let _ = state.config;
+async fn push_ios(state: Data<&Arc<AppState>>, body: Json<IOSPushBody>) -> impl IntoResponse {
+    let name = body.name.as_deref().unwrap_or_default();
 
     // info!("pushing ios {:?}", body);
-    let client = Client::new(&state.config.influxdb.url, &state.config.influxdb.bucket)
-        .with_token(&state.config.influxdb.token);
+    let client = Client::new(
+        &state.config.influxdb.url,
+        &state.config.influxdb.org,
+        &state.config.influxdb.token,
+    );
 
     let samples = body.samples.replace("\\\"", "\"");
     let samples = format!("[{}]", samples);
@@ -90,12 +95,22 @@ async fn push_ios(state: Data<&Arc<AppState>>, body: Json<PushBody>) -> impl Int
 
     info!("samples: {:?}", samples);
 
-    let samples: Vec<WriteQuery> = samples
+    let samples: Vec<DataPoint> = samples
         .into_iter()
-        .map(|s| WriteQuery::new(Timestamp::Seconds(s.end_date as u128), s.value.to_string()))
+        .map(|s| {
+            DataPoint::builder("heartrate")
+                .field("value", s.value)
+                .tag("entity", name)
+                .timestamp(s.end_date)
+                .build()
+                .unwrap()
+        })
         .collect();
 
-    client.query(samples).await.unwrap();
+    client
+        .write(&state.config.influxdb.bucket, stream::iter(samples))
+        .await
+        .unwrap();
 
     "ok"
 }
