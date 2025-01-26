@@ -11,10 +11,10 @@ RUN apt-get update && \
 WORKDIR /app
 
 # Copy the built binary from the builder stage
-COPY ./target/release/health_ingest .
+COPY ./target/release/health-ingest .
 
 # Expose port 3000
 EXPOSE 3000
 
 # Set the entrypoint command to run your application
-ENTRYPOINT ["./health_ingest"]
+ENTRYPOINT ["./health-ingest"]
