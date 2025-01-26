@@ -12,7 +12,7 @@ use poem::{
 use serde::{Deserialize, Serialize};
 use state::AppState;
 use std::sync::Arc;
-use tracing::info;
+use tracing::{error, info};
 
 pub mod state;
 
@@ -62,7 +62,14 @@ pub struct HeartrateSample {
 impl From<IOSHeartrateSample> for HeartrateSample {
     fn from(sample: IOSHeartrateSample) -> Self {
         Self {
-            value: sample.value.parse::<i64>().unwrap(),
+            value: sample
+                .value
+                .parse::<i64>()
+                .map_err(|err| {
+                    error!("error parsing value: {:?} {:?}", err, sample);
+                    err
+                })
+                .unwrap(),
             start_date: parse_ios_date(&sample.start_date).to_rfc2822(),
             end_date: parse_ios_date(&sample.end_date).timestamp_nanos() as i64,
         }
