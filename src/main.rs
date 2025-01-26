@@ -1,8 +1,6 @@
 use chrono::{DateTime, Utc};
 use futures::stream;
-use influxdb2::models::DataPoint;
-use influxdb2::Client;
-use influxdb2_derive::WriteDataPoint;
+use influxdb::{Client, Timestamp, WriteQuery};
 use poem::{
     handler,
     listener::TcpListener,
@@ -52,14 +50,10 @@ pub struct IOSHeartrateSample {
     end_date: String,
 }
 
-#[derive(Debug, Deserialize, Serialize, WriteDataPoint, Default)]
-#[measurement = "heartrate"]
+#[derive(Debug, Deserialize, Serialize, Default)]
 pub struct HeartrateSample {
-    #[influxdb(field)]
     value: i64,
-    #[influxdb(tag)]
     start_date: String,
-    #[influxdb(timestamp)]
     end_date: i64,
 }
 
@@ -85,11 +79,8 @@ async fn push_ios(state: Data<&Arc<AppState>>, body: Json<PushBody>) -> impl Int
     let _ = state.config;
 
     // info!("pushing ios {:?}", body);
-    let client = Client::new(
-        &state.config.influxdb.url,
-        &state.config.influxdb.org,
-        &state.config.influxdb.token,
-    );
+    let client = Client::new(&state.config.influxdb.url, &state.config.influxdb.bucket)
+        .with_token(&state.config.influxdb.token);
 
     let samples = body.samples.replace("\\\"", "\"");
     let samples = format!("[{}]", samples);
@@ -99,10 +90,12 @@ async fn push_ios(state: Data<&Arc<AppState>>, body: Json<PushBody>) -> impl Int
 
     info!("samples: {:?}", samples);
 
-    client
-        .write(&state.config.influxdb.bucket, stream::iter(samples))
-        .await
-        .unwrap();
+    let samples: Vec<WriteQuery> = samples
+        .into_iter()
+        .map(|s| WriteQuery::new(Timestamp::Seconds(s.end_date as u128), s.value.to_string()))
+        .collect();
+
+    client.query(samples).await.unwrap();
 
     "ok"
 }
