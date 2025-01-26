@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use futures::prelude::*;
 use influxdb2::models::DataPoint;
 use influxdb2::Client;
+use num_traits::ToPrimitive;
 use poem::{
     handler,
     listener::TcpListener,
@@ -64,11 +65,14 @@ impl From<IOSHeartrateSample> for HeartrateSample {
         Self {
             value: sample
                 .value
-                .parse::<i64>()
+                .parse::<f64>()
                 .map_err(|err| {
                     error!("error parsing value: {:?} {:?}", err, sample);
                     err
                 })
+                .unwrap()
+                .round()
+                .to_i64()
                 .unwrap(),
             start_date: parse_ios_date(&sample.start_date).to_rfc2822(),
             end_date: parse_ios_date(&sample.end_date).timestamp_nanos() as i64,
