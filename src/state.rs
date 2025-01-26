@@ -1,15 +1,17 @@
-use async_std::sync::Mutex;
 use figment::{providers::Env, Figment};
-use serde::Deserialize;
-use tracing::{debug, error, info};
-use url::{ParseError, Url};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub struct AppConfig {
-    pub influxdb_url: String,
-    pub influxdb_token: String,
-    pub influxdb_org: String,
-    pub influxdb_bucket: String,
+    pub influxdb: InfluxDbConfig,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct InfluxDbConfig {
+    pub url: String,
+    pub token: String,
+    pub org: String,
+    pub bucket: String,
 }
 
 pub struct AppState {
